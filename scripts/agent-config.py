@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""3사 훅과 AGY 어댑터 등록만 병합하고 해당 항목만 복원한다."""
+"""Claude·AGY 훅과 AGY 어댑터 등록만 병합하고 해당 항목만 복원한다."""
 import argparse
 import copy
 import json
@@ -9,7 +9,6 @@ import tempfile
 
 HOME = Path.home()
 BACKUP = HOME / '.dotfiles-backup/agent-config.json'
-CODEX = Path(os.environ.get('CODEX_HOME', str(HOME / '.codex')))
 
 
 def load(path):
@@ -42,7 +41,7 @@ def command(agent):
 
 def plans():
     result = []
-    for path, agent in [(HOME / '.claude/settings.json', 'claude'), (CODEX / 'hooks.json', 'codex')]:
+    for path, agent in [(HOME / '.claude/settings.json', 'claude')]:
         for event in ('UserPromptSubmit', 'Stop'):
             item = {'hooks': [{'type': 'command', 'command': command(agent), 'timeout': 10}]}
             result.append((path, ['hooks', event], item, 'append'))

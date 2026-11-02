@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
-Global Automatic Session Handoff Memory Guard for Claude Code, Antigravity (AGY), and OpenAI Codex.
+Global Automatic Session Handoff Memory Guard for Claude Code and Antigravity (AGY).
 - Claude threshold: <= 30.0% remaining context (from its session-specific statusline snapshot)
 - AGY threshold:    <= 50.0% remaining (context window or active model quota)
-- Codex threshold:  <= 50.0% remaining (context window or 5h/weekly rate limit)
 """
 import argparse
 import datetime
-import glob
 import json
 import math
 import os
@@ -15,7 +13,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
 
 AI_DIR = os.path.expanduser("~/.config/ai")
 HANDOFF_DIR = os.path.join(AI_DIR, "handoffs")
@@ -218,104 +215,6 @@ def extract_agy_metrics_and_recent(payload):
         "quota_rem": quota_rem,
         "effective_rem": effective_rem,
         "quota_summary": ", ".join(quota_details) if quota_details else "N/A",
-        "recent_users": recent_users[-3:],
-        "last_agent": last_agent,
-    }
-
-
-def extract_codex_metrics_and_recent(payload):
-    sess_id = payload.get("session_id") or payload.get("thread-id") or "unknown"
-    cwd = payload.get("cwd") or os.path.expanduser("~")
-    transcript_path = payload.get("transcript_path") or ""
-
-    if not transcript_path or not os.path.exists(transcript_path):
-        codex_home = os.environ.get("CODEX_HOME", os.path.expanduser("~/.codex"))
-        candidates = sorted(
-            glob.glob(os.path.join(codex_home, "sessions", "**", "*.jsonl"), recursive=True),
-            key=os.path.getmtime,
-        )
-        if sess_id != "unknown":
-            matched = [c for c in candidates if sess_id in os.path.basename(c)]
-            if matched:
-                transcript_path = matched[-1]
-            else:
-                transcript_path = ""
-        elif candidates:
-            transcript_path = candidates[-1]
-
-    ctx_rem = 100.0
-    quota_rem = 100.0
-    quota_details = []
-    recent_users = []
-    last_agent = (payload.get("last_assistant_message") or payload.get("last-assistant-message") or "").strip()[:400]
-
-    if transcript_path and os.path.exists(transcript_path):
-        try:
-            with open(transcript_path, "r", encoding="utf-8", errors="ignore") as f:
-                lines = f.readlines()[-120:]
-            transcript_matches = True
-            declared_session_id = ""
-            for line in lines:
-                try:
-                    obj = json.loads(line)
-                except Exception:
-                    continue
-                if obj.get("type") == "session_meta":
-                    meta = obj.get("payload") or {}
-                    declared_session_id = str(
-                        meta.get("id") or meta.get("session_id") or obj.get("session_id") or ""
-                    )
-                    if sess_id != "unknown" and declared_session_id and declared_session_id != sess_id:
-                        transcript_matches = False
-                    break
-            if sess_id != "unknown" and not declared_session_id and sess_id not in os.path.basename(transcript_path):
-                transcript_matches = False
-            for line in (lines if transcript_matches else []):
-                if '"token_count"' in line or '"user_message"' in line or '"agent_message"' in line:
-                    obj = json.loads(line)
-                    p = obj.get("payload") or {}
-                    ptype = p.get("type")
-                    if ptype == "token_count":
-                        info = p.get("info") or {}
-                        win = float(info.get("model_context_window") or 475000)
-                        last_u = info.get("last_token_usage") or {}
-                        in_tok = float(last_u.get("input_tokens") or last_u.get("total_tokens") or 0)
-                        if win > 0 and in_tok > 0:
-                            ctx_rem = max(0.0, 100.0 * (1.0 - in_tok / win))
-                        rl = p.get("rate_limits") or {}
-                        for rk in ("primary", "secondary"):
-                            rv = rl.get(rk)
-                            if isinstance(rv, dict) and rv.get("used_percent") is not None:
-                                try:
-                                    if float(rv.get("resets_at", 0) or 0) <= time.time() and rv.get("resets_at"):
-                                        continue
-                                except (TypeError, ValueError):
-                                    pass
-                                rem = max(0.0, 100.0 - float(rv["used_percent"]))
-                                quota_rem = min(quota_rem, rem)
-                                quota_details.append(f"{rk}:{rem:.1f}%")
-                    elif ptype == "user_message":
-                        msg = (p.get("message") or "").strip()
-                        if msg:
-                            recent_users.append(msg.splitlines()[0][:200])
-                    elif ptype == "agent_message" and not last_agent:
-                        msg = (p.get("message") or "").strip()
-                        if msg:
-                            last_agent = " / ".join(l.strip() for l in msg.splitlines() if l.strip())[:400]
-        except Exception:
-            pass
-
-    if payload.get("prompt"):
-        recent_users.append(str(payload["prompt"]).strip().splitlines()[0][:200])
-
-    effective_rem = min(ctx_rem, quota_rem)
-    return {
-        "session_id": sess_id,
-        "cwd": cwd,
-        "ctx_rem": ctx_rem,
-        "quota_rem": quota_rem,
-        "effective_rem": effective_rem,
-        "quota_summary": ", ".join(quota_details[-2:]) if quota_details else "N/A",
         "recent_users": recent_users[-3:],
         "last_agent": last_agent,
     }
@@ -576,7 +475,7 @@ def write_handoff_files(agent_label, threshold_pct, info):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--agent", required=True, choices=["claude", "agy", "agy-statusline", "codex"])
+    parser.add_argument("--agent", required=True, choices=["claude", "agy", "agy-statusline"])
     parser.add_argument("--statusline", action="store_true")
     args = parser.parse_args()
 
@@ -677,43 +576,6 @@ def main():
         else:
             print(json.dumps({}))
         return
-
-    if args.agent == "codex":
-        threshold = threshold_for("codex", 50.0)
-        info = extract_codex_metrics_and_recent(payload)
-        triggered = info["effective_rem"] <= threshold
-        event_name = payload.get("hook_event_name") or ""
-
-        if not triggered:
-            print(json.dumps({"continue": True}))
-            return
-
-        handoff_path = write_handoff_files("codex", threshold, info)
-        state = load_json_safe(STATE_FILE)
-        notified_key = f"codex_notified_{info['session_id']}"
-
-        if event_name == "UserPromptSubmit" and not state.get(notified_key):
-            state[notified_key] = info["effective_rem"]
-            save_json_safe(STATE_FILE, state)
-            msg = (
-                f"[AUTO-HANDOFF TRIGGER: Codex 잔여 한도 {info['effective_rem']:.1f}% <= {threshold:.0f}%] "
-                f"자동 핸즈오프 스냅샷이 `{handoff_path}` 및 `~/.config/ai/handoffs/LATEST_HANDOFF.md`에 생성되었습니다. "
-                f"현재 진행 상황·미결 이슈·다음 단계를 핸즈오프 파일과 `~/.config/ai/MEMORY.md`에 즉시 보완 기록하고, "
-                f"답변 마지막 줄에 `[자동 핸즈오프 알림: 잔여 한도 {info['effective_rem']:.1f}% 도달로 공용 허브에 인계를 완료했습니다]`를 반드시 출력하십시오."
-            )
-            print(
-                json.dumps(
-                    {
-                        "continue": True,
-                        "hookSpecificOutput": {
-                            "hookEventName": "UserPromptSubmit",
-                            "additionalContext": msg,
-                        },
-                    }
-                )
-            )
-        else:
-            print(json.dumps({"continue": True}))
 
 
 if __name__ == "__main__":
