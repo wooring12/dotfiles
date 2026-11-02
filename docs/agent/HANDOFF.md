@@ -6,7 +6,7 @@ Claude 핸즈오프 훅 오류를 고치고, AI 설정 공유와 웹 IDE 설치�
 
 ## 현재 상태
 
-- `ai/hooks/session_handoff_guard.py`는 Claude를 지원하고, Claude/Codex 30%와 AGY 50% 기준을 세션별로 적용한다.
+- `ai/hooks/session_handoff_guard.py`는 Claude 30%와 AGY 50% 기준을 세션별로 적용한다.
 - Agent Hub 기본 경로는 `~/.config/ai/agent_hub`이며 `AGENT_HUB_DIR`·`AGENT_HUB_DB`로 바꿀 수 있다. 기본 전용 디렉터리는 `0700`, DB·메모리 파일은 `0600`이다. 사용자 지정 경로 권한은 설치기가 변경하지 않는다.
 - `install.sh`는 macOS·Linux/WSL 패키지 관리자와 code-server 설치를 처리하고, 이미 있는 CLI·스킬 파일은 보존한다.
 - code-server 설정 폴더와 비밀번호 파일은 `0700`·`0600`으로 제한하고, 사용자 설정 내용은 보존한다.

@@ -17,10 +17,10 @@
 #        + settings.json 의 statusLine 및 ui.footer 키 merge
 #   6.   Codex CLI status line — ~/.codex/config.toml 의 [tui] status_line 키만 merge (codex/status-line.py)
 #        CLI 설치 여부와 무관하게 3사 설정·어댑터를 첫 실행에 함께 준비한다.
-#   7.   Global AI Agent Rules & SSOT Memory + 3사 훅·에이전트·설정 템플릿
+#   7.   Global AI Agent Rules & SSOT Memory + 3사 설정·에이전트, Claude·AGY 훅
 #        - ~/.config/ai/AGENTS.md 배치 및 ~/.config/ai/MEMORY.md 초기화
 #        - ~/.claude/CLAUDE.md, ~/.gemini/AGENTS.md, ~/.codex/AGENTS.md 심볼릭 링크 연결
-#        - Codex 2줄 보조 표시줄(codex-pretty), 10개 역할의 런타임 어댑터, 핸즈오프 훅
+#        - Codex 2줄 보조 표시줄(codex-pretty), 10개 역할의 런타임 어댑터, Claude·AGY 핸즈오프 훅
 #   7.1. 3사 Agent Hub와 스킬 저장소 — 중앙 SQLite 및 통합 스킬 경로
 #   7.2. 터미널 파일 뷰어 — yazi·glow·chafa (없을 때만), ~/.local/bin/fview, ~/.config/yazi/{yazi,keymap}.toml, piper 플러그인
 #   7.3. Claude Code 외부 확장 — claude/extensions.txt 의 저장소를 DOTFILES_EXT_DIR 에 클론하고

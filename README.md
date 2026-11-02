@@ -1,6 +1,6 @@
 # dotfiles
 
-zsh + starship 셸 환경, code-server 웹 IDE, AGY·Claude·Codex의 상태줄·공통 규칙·핸즈오프 훅·에이전트 어댑터를 새 머신에 맞추는 부트스트랩 저장소. macOS(Homebrew)와 Linux/WSL2(dnf·apt·pacman·zypper·apk)를 같은 `install.sh` 로 설치하고, `uninstall.sh` 로 설치 전 상태까지 되돌린다.
+zsh + starship 셸 환경, code-server 웹 IDE, AGY·Claude·Codex 상태줄과 공통 규칙·에이전트 어댑터, AGY·Claude 핸즈오프 훅을 새 머신에 맞추는 부트스트랩 저장소. macOS(Homebrew)와 Linux/WSL2(dnf·apt·pacman·zypper·apk)를 같은 `install.sh` 로 설치하고, `uninstall.sh` 로 설치 전 상태까지 되돌린다.
 
 어느 머신에나 그대로 적용할 수 있는 설정만 추적한다. 호스트 alias·내부 URL·API 키·개인 에이전트 지침처럼 머신이나 사람에 묶인 것은 저장소 밖(`~/.zshrc.local`, `~/.secrets.zsh`)에 둔다 — 자세한 경계는 [추적 범위](#추적-범위) 참고. 에이전트·기여자용 상세 규칙은 [AGENTS.md](AGENTS.md).
 
@@ -55,7 +55,7 @@ cd dotfiles && ./install.sh
 | 4 | Claude statusline | `claude/statusline-command.sh` → `~/.claude/statusline-command.sh` (+x). `~/.claude/settings.json` 의 `statusLine` 및 `ui.footer.hideContextPercentage` 키 merge (다른 키 불변, 파일 없으면 생성). 원자적 쓰기(`os.replace`) 및 mode 보존. |
 | 5 | Antigravity statusline | CLI 설치 여부와 무관하게 `agy/statusline-command.sh` → `~/.gemini/antigravity-cli/statusline-command.sh` (+x). `~/.gemini/antigravity-cli/settings.json` 의 `statusLine` 및 `ui.footer` 키 merge. |
 | 6 | Codex status line | CLI 설치 여부와 무관하게 `codex/status-line.py apply` 로 `config.toml` 의 `[tui]` `status_line` 키만 merge (다른 테이블·키·주석 불변, 파일 없으면 생성). |
-| 7 | 3사 공통 규칙·메모리·훅·에이전트 | `ai/AGENTS.md` → `~/.config/ai/AGENTS.md` (SSOT), 없으면 `ai/MEMORY.example.md` → `~/.config/ai/MEMORY.md` 생성. `~/.claude/CLAUDE.md`, `~/.gemini/AGENTS.md`, `~/.codex/AGENTS.md` 를 `~/.config/ai/AGENTS.md` 에 심볼릭 링크로 일괄 연결. 핸즈오프 훅, 런타임별 역할 어댑터 10개, 설정 템플릿, `codex-pretty`를 함께 배치한다. 메모리·훅·백업은 사용자 전용 권한으로 저장한다. |
+| 7 | 3사 공통 규칙·메모리·설정·에이전트 | `ai/AGENTS.md` → `~/.config/ai/AGENTS.md` (SSOT), 없으면 `ai/MEMORY.example.md` → `~/.config/ai/MEMORY.md` 생성. `~/.claude/CLAUDE.md`, `~/.gemini/AGENTS.md`, `~/.codex/AGENTS.md` 를 `~/.config/ai/AGENTS.md` 에 심볼릭 링크로 일괄 연결. Claude·AGY 핸즈오프 훅, 런타임별 역할 어댑터 10개, 설정 템플릿, `codex-pretty`를 함께 배치한다. 메모리·훅·백업은 사용자 전용 권한으로 저장한다. |
 | 7.1 | Agent Hub와 스킬 통합 | 세션·핸즈오프 SQLite와 통합 스킬 디렉터리를 설치한다. 기본 경로는 `~/.config/ai/agent_hub`이며 `AGENT_HUB_DIR`로 바꿀 수 있다. 새 DB는 Python 표준 SQLite로 권한을 제한해 초기화한다. 이미 존재하는 스킬 디렉터리나 다른 링크는 보존하고 건너뛴다. |
 | 7.2 | 터미널 파일 뷰어 | `yazi`·`ya`·`glow`·`chafa` 를 없을 때만 설치(macOS brew, Linux 는 GitHub 정적 바이너리 → `~/.local/bin`, 실패 시 경고만). `viewer/fview` → `~/.local/bin/fview`, `viewer/{yazi,keymap}.toml` → `~/.config/yazi/`, `ya pkg add yazi-rs/plugins:piper`. [터미널 파일 뷰어](#터미널-파일-뷰어) 참고. |
 | 7.3 | Claude 외부 확장 | `claude/extensions.txt` 의 저장소(attention-span, andrej-karpathy-skills, anti-slop)를 `DOTFILES_EXT_DIR`(기본 `~/.local/share/dotfiles-ext`)에 클론(이미 있으면 재사용)하고 `~/.claude/{output-styles,commands,skills}` 아래에 심볼릭 링크. 실제 파일·폴더가 있는 자리는 건드리지 않는다. 기본 출력 스타일은 켜지 않는다(`/style` 또는 `/config` 로 선택). |
@@ -289,11 +289,10 @@ AGY는 `~/.gemini/config/plugins/dotfiles-agent-adapters/agents/*.md`와 플러�
 업무 절차의 단일 원본인 각 역할의 `SKILL.md`는 원본 스킬 저장소에서 별도로 설치해야 한다.
 스킬 본문·개인 작업공간을 이 저장소로 복사하지 않으며 어댑터 파일 배치를 실제 에이전트 호출 성공으로 간주하지 않는다.
 
-핸즈오프 훅은 `ai/hooks/session_handoff_guard.py`를 배치한다.
-AGY는 컨텍스트 또는 현재 모델 쿼터 잔여량 50% 이하, Claude는 컨텍스트 30% 이하,
-Codex는 컨텍스트 또는 5시간/주간 한도 50% 이하에서 기록한다.
-`AI_HANDOFF_AGY_THRESHOLD`, `AI_HANDOFF_CLAUDE_THRESHOLD`, `AI_HANDOFF_CODEX_THRESHOLD`로 임계치를 바꿀 수 있다.
-AGY는 PreInvocation·Stop, Claude·Codex는 UserPromptSubmit·Stop에 연결한다.
+Claude·AGY 핸즈오프 훅은 `ai/hooks/session_handoff_guard.py`를 배치한다.
+AGY는 컨텍스트 또는 현재 모델 쿼터 잔여량 50% 이하, Claude는 컨텍스트 30% 이하에서 기록한다.
+`AI_HANDOFF_AGY_THRESHOLD`, `AI_HANDOFF_CLAUDE_THRESHOLD`로 임계치를 바꿀 수 있다.
+AGY는 PreInvocation·Stop, Claude는 UserPromptSubmit·Stop에 연결한다.
 Claude·AGY 상태줄은 세션별 실제 사용량을 전달한다.
 사용량이 없을 때 추정치나 다른 세션의 최근 로그를 대신 사용하지 않는다.
 훅의 스키마·신뢰 정책은 CLI 버전에 따라 달라질 수 있으며 필요한 승인은 각 CLI에서 정상 처리한다.

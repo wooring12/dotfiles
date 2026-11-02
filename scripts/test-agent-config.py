@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""임시 홈에서 설정 보존·훅 임계치·반복 실행·설치 복원을 검사한다."""
+"""임시 홈에서 설정 보존·Claude/AGY 훅 임계치·반복 실행·설치 복원을 검사한다."""
 import json
 import importlib.util
 import os
@@ -76,49 +76,11 @@ class AgentConfigTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(), before)
         self.assertFalse((self.home / '.dotfiles-backup/agent-config.json').exists())
 
-    def test_codex_threshold_and_manual_handoff_are_preserved(self):
-        transcript = self.home / 'rollout-session-one.jsonl'
-        event = {'payload': {'type': 'token_count', 'info': {'model_context_window': 1000,
-                 'last_token_usage': {'total_tokens': 710}}}}
-        transcript.write_text(json.dumps(event) + '\n')
-        payload = {'session_id': 'session-one', 'cwd': str(self.home), 'transcript_path': str(transcript),
-                   'hook_event_name': 'UserPromptSubmit', 'prompt': '작업 계속'}
-        event['payload']['info']['last_token_usage']['total_tokens'] = 650
-        transcript.write_text(json.dumps(event) + '\n')
-        out = json.loads(self.hook('codex', payload).stdout)
-        self.assertTrue(out['continue'])
-        self.assertFalse((self.home / '.config/ai/handoffs/HANDOFF_codex_session-one.md').exists())
-        event['payload']['info']['last_token_usage']['total_tokens'] = 710
-        transcript.write_text(json.dumps(event) + '\n')
-        out = json.loads(self.hook('codex', payload).stdout)
-        self.assertIn('additionalContext', out['hookSpecificOutput'])
-        md = self.home / '.config/ai/handoffs/HANDOFF_codex_session-one.md'
-        md.write_text(md.read_text() + '\n사용자 검증 결과 보존\n')
-        payload['hook_event_name'] = 'Stop'
-        self.assertTrue(json.loads(self.hook('codex', payload).stdout)['continue'])
-        self.assertIn('사용자 검증 결과 보존', md.read_text())
-
     def test_session_isolation_and_unknown_usage(self):
         self.hook('agy', {'conversationId': 'one', 'context_window': {'remaining_percentage': 10}}, True)
         result = json.loads(self.hook('agy', {'conversationId': 'two', 'cwd': str(self.home)}).stdout)
         self.assertEqual(result, {})
         self.assertFalse((self.home / '.config/ai/handoffs/HANDOFF_agy_two.md').exists())
-        self.hook('codex', {'session_id': 'unknown-usage', 'cwd': str(self.home)})
-        self.assertFalse((self.home / '.config/ai/handoffs/HANDOFF_codex_unknown-usage.md').exists())
-
-    def test_foreign_transcript_and_expired_quota_do_not_trigger(self):
-        transcript = self.home / 'rollout-other.jsonl'
-        quota = {'payload': {'type': 'token_count', 'rate_limits': {
-            'primary': {'window_minutes': 300, 'used_percent': 100, 'resets_at': 1}}}}
-        transcript.write_text(json.dumps({'type': 'session_meta', 'payload': {'id': 'other-session'}}) + '\n' +
-                              json.dumps({'payload': {'type': 'token_count', 'info': {'model_context_window': 1000,
-                              'last_token_usage': {'total_tokens': 990}}}}) + '\n')
-        self.hook('codex', {'session_id': 'own-session', 'transcript_path': str(transcript), 'cwd': str(self.home)})
-        self.assertFalse((self.home / '.config/ai/handoffs/HANDOFF_codex_own-session.md').exists())
-        transcript.write_text(json.dumps({'type': 'session_meta', 'payload': {'id': 'expired-session'}}) + '\n' +
-                              json.dumps(quota) + '\n')
-        self.hook('codex', {'session_id': 'expired-session', 'transcript_path': str(transcript), 'cwd': str(self.home)})
-        self.assertFalse((self.home / '.config/ai/handoffs/HANDOFF_codex_expired-session.md').exists())
 
     def test_agy_active_model_quota_and_claude_status_snapshot(self):
         data = {'conversationId': 'agy-one', 'cwd': str(self.home), 'model': {'display_name': 'Gemini'},
